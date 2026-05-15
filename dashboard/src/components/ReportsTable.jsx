@@ -55,11 +55,15 @@ export function ReportsTable({ issues }) {
               >
                 <td className="px-6 py-4 border-r-2 border-white/10">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={issue.image}
-                      alt={issue.id}
-                      className="w-12 h-12 object-cover border-2 border-white/20 grayscale group-hover:grayscale-0 transition-all"
-                    />
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-1">
+                        <img
+                          src={issue.image}
+                          alt={`${issue.id} original`}
+                          className="w-12 h-12 object-cover border-2 border-white/20 grayscale group-hover:grayscale-0 transition-all"
+                        />
+                      </div>
+                    </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-white truncate uppercase font-mono">{issue.id}</p>
                     </div>

@@ -54,10 +54,6 @@ export function PreviewScreen({ route, navigation }: any) {
   };
 
   const handleSubmit = async () => {
-    if (!description.trim()) {
-      alert('Please describe the issue');
-      return;
-    }
 
     if (!capturedImage) {
       alert('Please capture or select an image');

@@ -82,6 +82,7 @@ export async function fetchReportsFromFirestore() {
     reports.push({
       reportId: docSnap.id,
       imageUrl: data.imageUrl || data.image || '',
+      annotatedImageUrl: data.annotatedImageUrl || data.annotatedImage || '',
       location: data.location || { latitude: 0, longitude: 0 },
       analysis: data.analysis || {},
       status: data.status || 'Pending',
@@ -102,6 +103,7 @@ export async function fetchReportFromFirestore(id) {
   return {
     reportId: snap.id,
     imageUrl: data.imageUrl || data.image || '',
+    annotatedImageUrl: data.annotatedImageUrl || data.annotatedImage || '',
     location: data.location || { latitude: 0, longitude: 0 },
     analysis: data.analysis || {},
     status: data.status || 'Pending',

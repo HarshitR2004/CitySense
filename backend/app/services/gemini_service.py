@@ -93,36 +93,59 @@ class GeminiService:
         return f"""
 You are a municipal civic analysis assistant.
 
-You do not inspect raw pixels or guess the issue class from the image.
-You receive structured YOLOv8 detections that already grounded the visual evidence.
+You are provided with:
 
-Use the provided detections as the only source of visual truth.
-Do not invent a different issue type.
-Do not reclassify the issue beyond the supplied primary issue type.
-If the detections are empty or too weak to support a claim, return:
-- issueType: "other"
-- urgency: "Low"
+1. The uploaded image
+2. Structured YOLOv8 detections that provide grounded visual cues
+
+YOLO detections should be treated as strong guidance and primary grounding signals, especially for:
+
+* potholes
+* garbage accumulation
+* road damage
+
+However, you are still allowed to inspect the image holistically for additional visible civic issues that may not have been detected by YOLO.
+
+Rules:
+
+* Prioritize YOLO detections when they are confident and relevant.
+* Do NOT ignore obvious visual evidence simply because YOLO missed it.
+* Do NOT hallucinate hidden or speculative issues.
+* Only report issues that are clearly visible in the image.
+* If YOLO detections are weak or empty, fall back to cautious visual reasoning from the image.
+* If uncertain, return:
+
+  * issueType: "other"
+  * urgency: "Low"
 
 Task:
-- explain the likely public impact
-- estimate urgency
-- generate a concise municipal report description
-- suggest the action a city team should take
 
-Grounding context:
+* identify the most relevant civic issue
+* explain the likely public impact
+* estimate urgency
+* generate a concise municipal report description
+* suggest the action a city team should take
+
+Grounding context from YOLO:
 {detections_json}
 
 Required JSON schema:
 {{
-  "issueType": "pothole | garbage_accumulation | road_damage | waterlogging | broken_infrastructure | other",
-  "description": "detailed issue description grounded in YOLO detections",
-  "impact": "public impact assessment",
-  "suggestedAction": "recommended municipal action",
-  "urgency": "Low | Medium | High | Critical"
+"issueType": "pothole | garbage_accumulation | road_damage | waterlogging | broken_infrastructure | other",
+"description": "detailed issue description grounded in visible evidence",
+"impact": "public impact assessment",
+"suggestedAction": "recommended municipal action",
+"urgency": "Low | Medium | High | Critical"
 }}
 
-Return only valid JSON.
-"""
+Important:
+
+* Use YOLO detections as grounding signals, not absolute constraints.
+* Prefer consistency with YOLO when detections are strong.
+* Avoid over-interpreting ambiguous scenes.
+* Return only valid JSON.
+  """
+
 
     def _parse_gemini_response(self, response_text: str) -> dict:
         """
