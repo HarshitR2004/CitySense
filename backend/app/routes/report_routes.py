@@ -34,7 +34,7 @@ except Exception as e:
     status_code=status.HTTP_201_CREATED,
     summary="Upload image and generate infrastructure report",
     description="Accept an image of a civic infrastructure issue along with location metadata. "
-                "Analyze using Gemini Vision API and generate a structured municipal report.",
+                "Run YOLOv8 visual grounding first, then ask Gemini to generate a structured municipal report.",
     responses={
         201: {"description": "Report generated successfully"},
         400: {"description": "Invalid input or file format"},
@@ -109,7 +109,7 @@ async def analyze_image(
         # Process image and generate report
         logger.info(f"Processing image: {file.filename} at ({latitude}, {longitude})")
 
-        report_data = report_service.process_image_and_generate_report(
+        report_data = await report_service.process_image_and_generate_report_async(
             image_bytes=file_content,
             latitude=latitude,
             longitude=longitude,

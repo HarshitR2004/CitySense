@@ -1,19 +1,17 @@
 """
-Report Processing Service
+Report Processing Service.
 
-Orchestrates the workflow of analyzing images, storing them, and creating reports.
-This service coordinates between GeminiService and FirestoreService.
+Orchestrates the workflow of detecting issues with YOLOv8, grounding Gemini's
+reasoning on the detections, storing the image, and creating the report.
 """
 
+import asyncio
 import logging
-import os
-import tempfile
-from pathlib import Path
 from typing import Dict, Any
 
-from app.models.report_schema import ReportResponse, GeminiAnalysisResponse
 from app.services.gemini_service import GeminiService
 from app.services.firestore_service import FirestoreService
+from app.services.yolo_service import YOLOService
 
 logger = logging.getLogger(__name__)
 
@@ -24,24 +22,21 @@ class ReportService:
     def __init__(self):
         """Initialize report service with dependent services."""
         try:
-            print("[DEBUG INIT] Initializing ReportService...")
-            print("[DEBUG INIT] Setting up GeminiService...")
-            self.gemini_service = GeminiService()
-            
-            print("[DEBUG INIT] Setting up FirestoreService...")
-            self.firestore_service = FirestoreService()
-            
-            self.temp_upload_dir = "backend/temp_uploads"
+            logger.info("Initializing ReportService")
 
-            # Ensure temp directory exists
-            print(f"[DEBUG INIT] Verifying temp directory at {self.temp_upload_dir}...")
-            Path(self.temp_upload_dir).mkdir(parents=True, exist_ok=True)
-            
-            print("[DEBUG INIT] ReportService initialized successfully!")
+            # Load the visual grounding model first so the service fails fast if
+            # the trained weights are missing or invalid.
+            self.yolo_service = YOLOService()
+
+            # Gemini now reasons over YOLO output instead of independently
+            # classifying the image, which reduces hallucinated issue types.
+            self.gemini_service = GeminiService()
+
+            self.firestore_service = FirestoreService()
+
             logger.info("Report service initialized")
 
         except Exception as e:
-            print(f"[DEBUG INIT ERROR] Failed to initialize ReportService: {e}")
             logger.error(f"Failed to initialize Report service: {e}")
             raise
 
@@ -56,10 +51,11 @@ class ReportService:
         Process an image and generate a structured municipal report.
 
         Workflow:
-        1. Analyze image using Gemini Vision API
-        2. Upload image to Firebase Storage
-        3. Create report document in Firestore
-        4. Return structured response
+        1. Run YOLOv8 inference and filter low-confidence detections
+        2. Ground Gemini reasoning on the YOLO detections
+        3. Upload image to Firebase Storage
+        4. Create report document in Firestore
+        5. Return structured response
 
         Args:
             image_bytes: Image file content as bytes
@@ -74,31 +70,34 @@ class ReportService:
             ValueError: For invalid input or processing errors
             Exception: For service failures
         """
-        temp_file_path = None
-
         try:
-            print(f"\n[DEBUG PIPELINE] Starting processing for {original_filename}")
             logger.info(f"Starting image processing for {original_filename}")
 
-            # Step 1: Analyze image with Gemini Vision API
-            print("[DEBUG PIPELINE] Step 1: Calling Gemini Vision API...")
-            logger.debug("Step 1: Analyzing image with Gemini Vision API")
-            analysis = self.gemini_service.analyze_image(image_bytes)
-            print(f"[DEBUG PIPELINE] Step 1 Complete - Detected Issue: {analysis.get('issueType')}")
-            logger.info(f"Image analysis complete: {analysis.get('issueType')}")
+            # Step 1: Detect and localize visible issues with the trained YOLOv8 model.
+            logger.debug("Step 1: Running YOLOv8 inference")
+            yolo_result = self.yolo_service.analyze_image(image_bytes)
+            detection_context = self.yolo_service.build_gemini_context(yolo_result)
+            logger.info(
+                "YOLO grounding complete: %s detection(s), primary issue type=%s",
+                len(detection_context.get("detected_objects", [])),
+                detection_context.get("primary_issue_type"),
+            )
 
-            # Step 2: Upload image to Firebase Storage
-            print("[DEBUG PIPELINE] Step 2: Uploading image to Firebase Storage...")
-            logger.debug("Step 2: Uploading image to Firebase Storage")
+            # Step 2: Ask Gemini to reason over the structured detections instead
+            # of making an independent visual classification.
+            logger.debug("Step 2: Calling Gemini with grounded detection context")
+            analysis = self.gemini_service.analyze_detections(detection_context)
+            logger.info("Gemini reasoning complete: %s", analysis.get("issueType"))
+
+            # Step 3: Persist the original image for dashboard and review workflows.
+            logger.debug("Step 3: Uploading image to Firebase Storage")
             image_url = self.firestore_service.upload_image_to_storage(
                 image_bytes, original_filename
             )
-            print(f"[DEBUG PIPELINE] Step 2 Complete - Image URL: {image_url[:30]}...")
             logger.info(f"Image uploaded to Storage: {image_url}")
 
-            # Step 3: Create report in Firestore
-            print("[DEBUG PIPELINE] Step 3: Saving report to Firestore...")
-            logger.debug("Step 3: Creating report in Firestore")
+            # Step 4: Save the report, keeping the YOLO context alongside the Gemini analysis.
+            logger.debug("Step 4: Creating report in Firestore")
             location = {
                 "latitude": latitude,
                 "longitude": longitude
@@ -107,16 +106,15 @@ class ReportService:
             report_id = self.firestore_service.create_report(
                 location=location,
                 analysis=analysis,
-                image_url=image_url
+                image_url=image_url,
+                detection_context=detection_context,
             )
-            print(f"[DEBUG PIPELINE] Step 3 Complete - Report created with ID: {report_id}")
             logger.info(f"Report created in Firestore: {report_id}")
 
-            # Step 4: Retrieve and return complete report
-            print("[DEBUG PIPELINE] Step 4: Fetching final report data...")
+            # Step 5: Retrieve and return the persisted report record.
+            logger.debug("Step 5: Fetching final report data")
             report_data = self.firestore_service.get_report_by_id(report_id)
 
-            print(f"[DEBUG PIPELINE] Pipeline finished successfully for report {report_id}\n")
             logger.info(f"Image processing completed successfully: {report_id}")
             return report_data
 
@@ -126,14 +124,23 @@ class ReportService:
         except Exception as e:
             logger.error(f"Error processing image and generating report: {e}")
             raise
-        finally:
-            # Cleanup temporary files if created
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                    logger.debug(f"Cleaned up temporary file: {temp_file_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean up temp file {temp_file_path}: {e}")
+
+    async def process_image_and_generate_report_async(
+        self,
+        image_bytes: bytes,
+        latitude: float,
+        longitude: float,
+        original_filename: str = "image.jpg",
+    ) -> Dict[str, Any]:
+        """Async wrapper for the full pipeline to support request offloading."""
+
+        return await asyncio.to_thread(
+            self.process_image_and_generate_report,
+            image_bytes,
+            latitude,
+            longitude,
+            original_filename,
+        )
 
     def get_all_reports(self) -> list:
         """

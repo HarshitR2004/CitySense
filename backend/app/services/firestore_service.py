@@ -31,7 +31,8 @@ class FirestoreService:
         self,
         location: Dict[str, float],
         analysis: Dict[str, Any],
-        image_url: str
+        image_url: str,
+        detection_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Create a new report document in Firestore.
@@ -55,6 +56,7 @@ class FirestoreService:
                 "imageUrl": image_url,
                 "location": location,
                 "analysis": analysis,
+                "detectionContext": detection_context or {},
                 "status": ReportStatus.PENDING.value,
                 "createdAt": datetime.utcnow(),
                 "updatedAt": datetime.utcnow(),

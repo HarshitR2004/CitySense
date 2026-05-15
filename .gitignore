@@ -87,6 +87,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
-
-
+models/best_sample.pt
+data/
 City Sense.pdf
