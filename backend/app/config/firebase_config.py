@@ -8,6 +8,7 @@ from firebase_admin import credentials, firestore, storage
 logger = logging.getLogger(__name__)
 
 
+
 class FirebaseConfig:
     """Manages Firebase service initialization and provides access to clients."""
 

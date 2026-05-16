@@ -6,7 +6,7 @@ and are used for validation and serialization.
 """
 
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional
 from enum import Enum
 
 from pydantic import BaseModel, Field, validator
@@ -28,11 +28,36 @@ class IssueType(str, Enum):
 
 
 class ReportStatus(str, Enum):
-    """Status of a report in the municipal workflow."""
+    """Lifecycle status of a report record."""
 
-    PENDING = "Pending"
-    IN_PROGRESS = "In Progress"
-    RESOLVED = "Resolved"
+    REPORTED = "reported"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class AIProcessingStatus(str, Enum):
+    """Lifecycle status for background AI processing."""
+
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ProcessingStage(str, Enum):
+    """Fine-grained stage of the async AI pipeline."""
+
+    WAITING = "waiting"
+    QUEUED = "queued"
+    DOWNLOADING = "downloading"
+    DETECTING = "detecting"
+    REASONING = "reasoning"
+    ENRICHING = "enriching"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RETRYING = "retrying"
+    QUEUE_FAILED = "queue_failed"
 
 
 class UrgencyLevel(str, Enum):
@@ -152,17 +177,43 @@ class ReportResponse(BaseModel):
         ...,
         description="Geographical location where issue was reported"
     )
-    analysis: GeminiAnalysisResponse = Field(
-        ...,
+    analysis: Optional[GeminiAnalysisResponse] = Field(
+        default=None,
         description="AI-generated analysis of the infrastructure issue"
     )
     status: ReportStatus = Field(
-        default=ReportStatus.PENDING,
+        default=ReportStatus.REPORTED,
         description="Current status in the municipal workflow"
+    )
+    ai_status: AIProcessingStatus = Field(
+        default=AIProcessingStatus.QUEUED,
+        description="Current async AI processing status"
+    )
+    stage: ProcessingStage = Field(
+        default=ProcessingStage.WAITING,
+        description="Current stage in the AI processing pipeline"
+    )
+    progress: int = Field(
+        0,
+        ge=0,
+        le=100,
+        description="Processing progress percentage"
+    )
+    task_id: Optional[str] = Field(
+        None,
+        description="Celery task identifier"
+    )
+    processing_error: Optional[str] = Field(
+        None,
+        description="Latest processing error, if any"
     )
     createdAt: datetime = Field(
         ...,
         description="Timestamp when report was created"
+    )
+    updatedAt: Optional[datetime] = Field(
+        None,
+        description="Timestamp when report was last updated"
     )
 
     class Config:

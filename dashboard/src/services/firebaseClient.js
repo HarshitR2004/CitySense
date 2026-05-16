@@ -8,7 +8,8 @@ import {
   doc,
   getDoc,
   query,
-  orderBy
+  orderBy,
+  onSnapshot
 } from 'firebase/firestore';
 
 let firestore = null;
@@ -69,6 +70,21 @@ function toISO(value) {
   }
 }
 
+function mapDocToReport(docSnap) {
+  const data = docSnap.data();
+  return {
+    reportId: docSnap.id,
+    imageUrl: data.imageUrl || data.image || '',
+    annotatedImageUrl: data.annotatedImageUrl || data.annotatedImage || '',
+    location: data.location || { latitude: 0, longitude: 0 },
+    analysis: data.analysis || {},
+    status: data.status || 'reported',
+    task_id: data.task_id || data.taskId || null,
+    createdAt: toISO(data.createdAt),
+    updatedAt: toISO(data.updatedAt || data.createdAt),
+  };
+}
+
 export async function fetchReportsFromFirestore() {
   const db = getFirestoreClient();
   if (!db) return null;
@@ -76,21 +92,7 @@ export async function fetchReportsFromFirestore() {
   const coll = collection(db, 'reports');
   const q = query(coll, orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
-  const reports = [];
-  snap.forEach((docSnap) => {
-    const data = docSnap.data();
-    reports.push({
-      reportId: docSnap.id,
-      imageUrl: data.imageUrl || data.image || '',
-      annotatedImageUrl: data.annotatedImageUrl || data.annotatedImage || '',
-      location: data.location || { latitude: 0, longitude: 0 },
-      analysis: data.analysis || {},
-      status: data.status || 'Pending',
-      createdAt: toISO(data.createdAt),
-      updatedAt: toISO(data.updatedAt || data.createdAt),
-    });
-  });
-  return reports;
+  return snap.docs.map(mapDocToReport);
 }
 
 export async function fetchReportFromFirestore(id) {
@@ -99,17 +101,29 @@ export async function fetchReportFromFirestore(id) {
   const docRef = doc(db, 'reports', id);
   const snap = await getDoc(docRef);
   if (!snap.exists()) return null;
-  const data = snap.data();
-  return {
-    reportId: snap.id,
-    imageUrl: data.imageUrl || data.image || '',
-    annotatedImageUrl: data.annotatedImageUrl || data.annotatedImage || '',
-    location: data.location || { latitude: 0, longitude: 0 },
-    analysis: data.analysis || {},
-    status: data.status || 'Pending',
-    createdAt: toISO(data.createdAt),
-    updatedAt: toISO(data.updatedAt || data.createdAt),
-  };
+  return mapDocToReport(snap);
+}
+
+export function subscribeToReportsFromFirestore(onReports, onError) {
+  const db = getFirestoreClient();
+  if (!db) {
+    onError?.(new Error('Firestore is not available'));
+    return () => {};
+  }
+
+  const coll = collection(db, 'reports');
+  const q = query(coll, orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      onReports(snapshot.docs.map(mapDocToReport));
+    },
+    (error) => {
+      console.error('Firestore subscription error', error);
+      onError?.(error);
+    }
+  );
 }
 
 export function isFirebaseAvailable() {
@@ -120,4 +134,5 @@ export default {
   isFirebaseAvailable,
   fetchReportsFromFirestore,
   fetchReportFromFirestore,
+  subscribeToReportsFromFirestore,
 };

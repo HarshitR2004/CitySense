@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from app.core.logging_config import configure_logging
 from app.models.report_schema import HealthCheckResponse
 from app.routes import report_routes
 
@@ -25,10 +26,7 @@ from app.routes import report_routes
 # Logging Configuration
 # ============================================
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -71,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CitySense Backend API",
-    description="AI-powered civic infrastructure reporting system using Google Gemini Vision API",
+    description="AI-powered civic infrastructure reporting system using FastAPI, Redis, Celery, Firebase, and grounded Gemini/YOLO background processing",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

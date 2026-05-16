@@ -16,19 +16,20 @@ export function ReportsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = await apiService.fetchReports();
+    setLoading(true);
+
+    const unsubscribe = apiService.subscribeReports(
+      (data) => {
         setIssues(data);
-      } catch (err) {
-        console.error('Failed to fetch reports:', err);
-      } finally {
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Failed to subscribe to reports:', err);
         setLoading(false);
       }
-    };
+    );
 
-    fetchData();
+    return () => unsubscribe?.();
   }, []);
 
   const filteredIssues = issues.filter((issue) => {

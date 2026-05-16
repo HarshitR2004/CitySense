@@ -18,7 +18,6 @@ class GeminiService:
         """Initialize Gemini service with API key from environment."""
 
         api_key = os.getenv("GOOGLE_API_KEY")
-
         if not api_key:
             logger.error("GOOGLE_API_KEY environment variable not set")
             raise ValueError("GOOGLE_API_KEY environment variable is required")

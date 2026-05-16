@@ -6,6 +6,22 @@ import { Link } from 'react-router-dom';
 export function ReportsTable({ issues }) {
   const [hoveredRow, setHoveredRow] = useState(null);
 
+  const getStatusBadgeStyle = (status) => {
+    switch ((status || '').toLowerCase()) {
+      case 'reported':
+        return 'bg-white text-black border-white';
+      case 'reviewed':
+        return 'bg-violet text-white border-violet';
+      case 'resolved':
+        return 'bg-acid text-black border-acid';
+      case 'closed':
+        return 'bg-white/10 text-white border-white/20';
+      default:
+        return 'bg-transparent text-white border-white/50';
+    }
+  };
+
+
   const getUrgencyBadgeStyle = (urgency) => {
     switch (urgency) {
       case 'critical':
@@ -32,7 +48,7 @@ export function ReportsTable({ issues }) {
                 Urgency
               </th>
               <th className="px-6 py-4 text-left text-xs font-heading font-bold text-white uppercase tracking-wider border-r-2 border-white/10">
-                Coordinates
+                Location
               </th>
               <th className="px-6 py-4 text-left text-xs font-heading font-bold text-white uppercase tracking-wider border-r-2 border-white/10">
                 Date
@@ -66,6 +82,9 @@ export function ReportsTable({ issues }) {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-white truncate uppercase font-mono">{issue.id}</p>
+                      <span className={`mt-2 inline-flex items-center px-2 py-1 text-[10px] font-bold uppercase tracking-wider border ${getStatusBadgeStyle(issue.reportStatus)}`}>
+                        {issue.reportStatus}
+                      </span>
                     </div>
                   </div>
                 </td>
@@ -74,6 +93,7 @@ export function ReportsTable({ issues }) {
                     {issue.urgency.toUpperCase()}
                   </span>
                 </td>
+                {/* AI processing UI removed per request */}
                 <td className="px-6 py-4 border-r-2 border-white/10">
                   <p className="text-sm text-white/70 truncate font-mono">{issue.latitude.toFixed(4)}, {issue.longitude.toFixed(4)}</p>
                 </td>

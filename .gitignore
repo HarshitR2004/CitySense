@@ -90,3 +90,4 @@ logs/
 models/best_sample.pt
 data/
 City Sense.pdf
+demo/

@@ -13,19 +13,20 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = await apiService.fetchReports();
+    setLoading(true);
+
+    const unsubscribe = apiService.subscribeReports(
+      (data) => {
         setIssues(data);
-      } catch (err) {
-        console.error('Failed to fetch reports:', err);
-      } finally {
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Failed to subscribe to reports:', err);
         setLoading(false);
       }
-    };
+    );
 
-    fetchData();
+    return () => unsubscribe?.();
   }, []);
 
   const recentIssues = issues.slice(0, 5);
@@ -84,14 +85,14 @@ export function Dashboard() {
             <h1 className="text-4xl font-heading font-bold uppercase tracking-wider text-white mb-2">
               Smart City Terminal
             </h1>
-            <p className="text-acid font-mono uppercase tracking-widest text-sm">AI-powered urban issue detection</p>
+            <p className="text-acid font-mono uppercase tracking-widest text-sm">AI-powered</p>
           </motion.div>
 
 
 
           {/* Map */}
           <motion.div variants={itemVariants} className="bg-black border-2 border-white/20 p-6 shadow-brutal">
-            <h2 className="text-xl font-heading font-bold uppercase tracking-wider text-white mb-4 border-b-2 border-white/20 pb-2">Interactive Map</h2>
+            <h2 className="text-xl font-heading font-bold uppercase tracking-wider text-white mb-4 border-b-2 border-white/20 pb-2">Map</h2>
             <div className="h-[400px]">
               <IssuesMap issues={issues} onMarkerClick={setSelectedIssue} />
             </div>

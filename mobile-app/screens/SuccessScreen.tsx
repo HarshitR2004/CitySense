@@ -31,7 +31,7 @@ export function SuccessScreen({ route, navigation }: any) {
             textAlign: 'center',
             textTransform: 'uppercase',
           }}>
-            TRANSMISSION{'\n'}SUCCESS
+            SUCCESS
           </Text>
           <Text style={{
             fontFamily: 'PlusJakartaSans_400Regular',
@@ -71,7 +71,7 @@ export function SuccessScreen({ route, navigation }: any) {
         {/* Buttons */}
         <View style={{ width: '100%', gap: 12, marginTop: 16 }}>
           <GlowingButton
-            label="RETURN TO MAIN"
+            label="RETURN TO HOME"
             onPress={handleReturnHome}
             size="lg"
             variant="primary"

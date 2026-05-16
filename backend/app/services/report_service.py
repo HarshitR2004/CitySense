@@ -1,61 +1,49 @@
-"""
-Report Processing Service.
-
-Orchestrates the workflow of detecting issues with YOLOv8, grounding Gemini's
-reasoning on the detections, storing the image, and creating the report.
-"""
+"""Report ingestion service for the immediate submission path."""
 
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-from app.services.gemini_service import GeminiService
+from app.core.celery_app import celery_app
+from app.models.queue_schema import AIProcessingStatus, ProcessingStage, ReportSubmissionResponse
+from app.models.report_schema import ReportStatus
 from app.services.firestore_service import FirestoreService
-from app.services.yolo_service import YOLOService
 
 logger = logging.getLogger(__name__)
 
 
 class ReportService:
-    """Orchestrates the complete workflow for image analysis and report generation."""
+    """Handles the durable submit path and Celery task dispatch."""
 
     def __init__(self):
-        """Initialize report service with dependent services."""
+        """Initialize report service with Firestore only.
+
+        The AI services are intentionally not loaded here so the API layer stays
+        lightweight and never performs YOLO/Gemini work on the request thread.
+        """
+
         try:
-            logger.info("Initializing ReportService")
-
-            # Load the visual grounding model first so the service fails fast if
-            # the trained weights are missing or invalid.
-            self.yolo_service = YOLOService()
-
-            # Gemini now reasons over YOLO output instead of independently
-            # classifying the image, which reduces hallucinated issue types.
-            self.gemini_service = GeminiService()
-
             self.firestore_service = FirestoreService()
 
-            logger.info("Report service initialized")
+            logger.info("Report service initialized for async ingestion")
 
         except Exception as e:
             logger.error(f"Failed to initialize Report service: {e}")
             raise
 
-    def process_image_and_generate_report(
+    def submit_report(
         self,
         image_bytes: bytes,
         latitude: float,
         longitude: float,
-        original_filename: str = "image.jpg"
+        original_filename: str = "image.jpg",
+        content_type: str = "image/jpeg",
     ) -> Dict[str, Any]:
         """
-        Process an image and generate a structured municipal report.
+        Persist the submission immediately and enqueue the AI pipeline.
 
-        Workflow:
-        1. Run YOLOv8 inference and filter low-confidence detections
-        2. Ground Gemini reasoning on the YOLO detections
-        3. Upload image to Firebase Storage
-        4. Create report document in Firestore
-        5. Return structured response
+        This method is intentionally split from the Celery worker path. It only
+        handles the durable user-facing submission and queue dispatch.
 
         Args:
             image_bytes: Image file content as bytes
@@ -64,65 +52,77 @@ class ReportService:
             original_filename: Original filename for storage purposes
 
         Returns:
-            dict: Complete report data including analysis and metadata
+            dict: Submission response including the generated report ID and task ID
 
         Raises:
-            ValueError: For invalid input or processing errors
-            Exception: For service failures
+            ValueError: For invalid input
+            Exception: For storage or Firestore failures
         """
         try:
-            logger.info(f"Starting image processing for {original_filename}")
+            logger.info("Submitting report for %s", original_filename)
 
-            # Step 1: Detect and localize visible issues with the trained YOLOv8 model.
-            logger.debug("Step 1: Running YOLOv8 inference")
-            yolo_result = self.yolo_service.analyze_image(image_bytes)
-            detection_context = self.yolo_service.build_gemini_context(yolo_result)
-            logger.info(
-                "YOLO grounding complete: %s detection(s), primary issue type=%s",
-                len(detection_context.get("detected_objects", [])),
-                detection_context.get("primary_issue_type"),
-            )
-
-            # Step 2: Ask Gemini to reason over the structured detections instead
-            # of making an independent visual classification.
-            logger.debug("Step 2: Calling Gemini with grounded detection context")
-            analysis = self.gemini_service.analyze_detections(detection_context)
-            logger.info("Gemini reasoning complete: %s", analysis.get("issueType"))
-
-            # Step 3: Persist the original image for dashboard and review workflows.
-            logger.debug("Step 3: Uploading image to Firebase Storage")
-            image_url = self.firestore_service.upload_image_to_storage(
-                image_bytes, original_filename
-            )
-            logger.info(f"Image uploaded to Storage: {image_url}")
-
-            # Step 4: Save the report, keeping the YOLO context alongside the Gemini analysis.
-            logger.debug("Step 4: Creating report in Firestore")
+            report_id = self.firestore_service.generate_report_id()
             location = {
                 "latitude": latitude,
                 "longitude": longitude
             }
 
-            report_id = self.firestore_service.create_report(
-                location=location,
-                analysis=analysis,
-                image_url=image_url,
-                detection_context=detection_context,
+            storage_path = self.firestore_service.build_storage_path(report_id, original_filename)
+            image_url = self.firestore_service.upload_image_to_storage(
+                image_bytes,
+                original_filename,
+                blob_name=storage_path,
+                content_type=content_type,
             )
-            logger.info(f"Report created in Firestore: {report_id}")
 
-            # Step 5: Retrieve and return the persisted report record.
-            logger.debug("Step 5: Fetching final report data")
-            report_data = self.firestore_service.get_report_by_id(report_id)
+            self.firestore_service.create_report(
+                report_id=report_id,
+                location=location,
+                image_url=image_url,
+                storage_path=storage_path,
+                analysis={},
+                detection_context={},
+                status=ReportStatus.REPORTED,
+                ai_status=AIProcessingStatus.QUEUED,
+                stage=ProcessingStage.WAITING,
+                progress=0,
+            )
 
-            logger.info(f"Image processing completed successfully: {report_id}")
-            return report_data
+            logger.info("Report persisted with id=%s, storage_path=%s", report_id, storage_path)
+
+            task_id: Optional[str] = None
+
+            try:
+                async_result = celery_app.send_task("citysense.process_report_ai", args=[report_id])
+                task_id = async_result.id
+
+                self.firestore_service.update_ai_processing_state(
+                    report_id,
+                    ai_status=AIProcessingStatus.QUEUED,
+                    stage=ProcessingStage.QUEUED,
+                    progress=0,
+                    task_id=task_id,
+                )
+
+            except Exception as queue_error:
+                logger.error("Failed to enqueue AI task for %s: %s", report_id, queue_error, exc_info=True)
+                self.firestore_service.mark_ai_queue_failed(report_id, str(queue_error))
+
+            submission = ReportSubmissionResponse(
+                report_id=report_id,
+                message="Issue reported successfully",
+                ai_status=AIProcessingStatus.QUEUED if task_id else AIProcessingStatus.FAILED,
+                stage=ProcessingStage.QUEUED if task_id else ProcessingStage.QUEUE_FAILED,
+                task_id=task_id,
+            )
+
+            return submission.model_dump()
 
         except ValueError as e:
             logger.error(f"Validation error during report processing: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error processing image and generating report: {e}")
+            logger.error(f"Error submitting report: {e}")
             raise
 
     async def process_image_and_generate_report_async(
@@ -131,16 +131,30 @@ class ReportService:
         latitude: float,
         longitude: float,
         original_filename: str = "image.jpg",
+        content_type: str = "image/jpeg",
     ) -> Dict[str, Any]:
-        """Async wrapper for the full pipeline to support request offloading."""
+        """Async wrapper for the submit path to keep the FastAPI handler non-blocking."""
 
         return await asyncio.to_thread(
-            self.process_image_and_generate_report,
+            self.submit_report,
             image_bytes,
             latitude,
             longitude,
             original_filename,
+            content_type,
         )
+
+    def process_image_and_generate_report(
+        self,
+        image_bytes: bytes,
+        latitude: float,
+        longitude: float,
+        original_filename: str = "image.jpg",
+        content_type: str = "image/jpeg",
+    ) -> Dict[str, Any]:
+        """Backward-facing alias for the new submit path."""
+
+        return self.submit_report(image_bytes, latitude, longitude, original_filename, content_type)
 
     def get_all_reports(self) -> list:
         """
@@ -207,7 +221,6 @@ class ReportService:
         try:
             from app.models.report_schema import ReportStatus
 
-            # Validate status
             try:
                 status_enum = ReportStatus(status)
             except ValueError:

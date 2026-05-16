@@ -92,7 +92,7 @@ export function HomeScreen({ navigation }: any) {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#09090b' }}>
-      <View style={{ flex: 1, minHeight: '100%', paddingHorizontal: 24, paddingVertical: 64, justifyContent: 'space-between' }}>
+      <View style={{ flex: 1, minHeight: '100%', paddingHorizontal: 24, paddingVertical: 64, justifyContent: 'flex-start' }}>
         
         {/* Header */}
         <Animated.View style={animatedHeaderStyle}>
@@ -148,7 +148,7 @@ export function HomeScreen({ navigation }: any) {
         </Animated.View>
 
         {/* Buttons */}
-        <Animated.View style={[animatedButtonsStyle, { gap: 20 }]}>
+        <Animated.View style={[animatedButtonsStyle, { gap: 10 }]}>
           <GlowingCard intensity="lg" style={{ padding: 24, marginBottom: 8 }}>
             <Text style={{
               fontFamily: 'Unbounded_700Bold',

@@ -1,8 +1,6 @@
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
-from fastapi.responses import JSONResponse
 
 from app.models.report_schema import (
     ReportResponse,
@@ -10,6 +8,7 @@ from app.models.report_schema import (
     ReportUpdateRequest,
     ErrorResponse,
 )
+from app.models.queue_schema import ReportSubmissionResponse
 from app.services.report_service import ReportService
 
 logger = logging.getLogger(__name__)
@@ -30,13 +29,13 @@ except Exception as e:
 
 @router.post(
     "/analyze",
-    response_model=ReportResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=ReportSubmissionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Upload image and generate infrastructure report",
     description="Accept an image of a civic infrastructure issue along with location metadata. "
-                "Run YOLOv8 visual grounding first, then ask Gemini to generate a structured municipal report.",
+                "Persist the report immediately, then queue YOLOv8 and Gemini processing in the background.",
     responses={
-        201: {"description": "Report generated successfully"},
+        202: {"description": "Report accepted and queued for background processing"},
         400: {"description": "Invalid input or file format"},
         500: {"description": "Server error during processing"},
     }
@@ -113,11 +112,12 @@ async def analyze_image(
             image_bytes=file_content,
             latitude=latitude,
             longitude=longitude,
-            original_filename=file.filename or "image.jpg"
+            original_filename=file.filename or "image.jpg",
+            content_type=file.content_type or "image/jpeg",
         )
 
-        logger.info(f"Report generated: {report_data.get('reportId')}")
-        return ReportResponse(**report_data)
+        logger.info(f"Report accepted: {report_data.get('report_id')}")
+        return ReportSubmissionResponse(**report_data)
 
     except HTTPException:
         raise

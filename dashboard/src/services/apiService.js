@@ -13,6 +13,9 @@ function mapReportToIssue(report) {
     issueType: formatIssueType(report.analysis?.issueType),
     suggestedAction: report.analysis?.suggestedAction || '',
     urgency: (report.analysis?.urgency || 'medium').toLowerCase(),
+    reportStatus: (report.status || 'reported').toLowerCase(),
+    // AI lifecycle fields removed
+    taskId: report.task_id || report.taskId || '',
     latitude: report.location?.latitude || 0,
     longitude: report.location?.longitude || 0,
     image: report.imageUrl || '',
@@ -36,6 +39,13 @@ export const apiService = {
       throw new Error('Failed to fetch report from Firestore');
     }
     return mapReportToIssue(report);
+  },
+
+  subscribeReports(onReports, onError) {
+    return firebaseClient.subscribeToReportsFromFirestore(
+      (reports) => onReports((reports || []).map(mapReportToIssue)),
+      onError
+    );
   },
 };
 

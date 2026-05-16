@@ -65,6 +65,8 @@ export function ReportDetailsPage() {
     }
   };
 
+  const hasAnalysis = Boolean(issue.description || issue.impact || issue.suggestedAction);
+
   return (
     <div className="min-h-screen bg-transparent">
       <Sidebar />
@@ -91,6 +93,12 @@ export function ReportDetailsPage() {
           <div className="flex items-start justify-between border-b-2 border-white/20 pb-4">
             <div>
               <h1 className="text-4xl font-heading font-bold uppercase tracking-wider text-white mb-2">Report {issue.id}</h1>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider border-2 border-white/20 text-white bg-white/5">
+                  {issue.reportStatus}
+                </span>
+                {/* AI processing status removed from UI */}
+              </div>
             </div>
             <div className={`flex items-center gap-2 px-6 py-2 border-2 shadow-brutal ${getUrgencyColor(issue.urgency)}`}>
               <AlertCircle size={20} />
@@ -121,36 +129,44 @@ export function ReportDetailsPage() {
                 className="mt-6 p-6 bg-black border-2 border-white/20 shadow-brutal"
               >
                 <h2 className="text-2xl font-heading font-bold uppercase tracking-wider text-white mb-6 border-b-2 border-white/20 pb-2">Analysis</h2>
-                
-                <div className="space-y-6 font-mono">
-                  <div>
-                    <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Description</p>
-                    <p className="text-white text-lg leading-relaxed">{issue.description}</p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Impact</p>
-                    <p className="text-white text-lg leading-relaxed">{issue.impact}</p>
-                  </div>
-                  
-                  <div>
-                    <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Suggested Action</p>
-                    <p className="text-white text-lg leading-relaxed">{issue.suggestedAction}</p>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t-2 border-white/20">
-                    <div className="p-4 bg-white/5 border-2 border-white/20">
-                      <p className="text-white/50 text-sm mb-1 uppercase tracking-widest">Issue Type</p>
-                      <p className="text-xl font-bold text-white uppercase">{issue.issueType}</p>
+                {hasAnalysis ? (
+                  <div className="space-y-6 font-mono">
+                    <div>
+                      <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Description</p>
+                      <p className="text-white text-lg leading-relaxed">{issue.description}</p>
                     </div>
-                    <div className="p-4 bg-white/5 border-2 border-white/20">
-                      <p className="text-white/50 text-sm mb-1 uppercase tracking-widest">Urgency</p>
-                      <p className={`text-xl font-bold text-white uppercase ${getUrgencyColor(issue.urgency).split(' ')[0]}`}>
-                        {issue.urgency}
-                      </p>
+
+                    <div>
+                      <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Impact</p>
+                      <p className="text-white text-lg leading-relaxed">{issue.impact}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-acid text-sm mb-1 uppercase font-bold tracking-widest">Suggested Action</p>
+                      <p className="text-white text-lg leading-relaxed">{issue.suggestedAction}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t-2 border-white/20">
+                      <div className="p-4 bg-white/5 border-2 border-white/20">
+                        <p className="text-white/50 text-sm mb-1 uppercase tracking-widest">Issue Type</p>
+                        <p className="text-xl font-bold text-white uppercase">{issue.issueType}</p>
+                      </div>
+                      <div className="p-4 bg-white/5 border-2 border-white/20">
+                        <p className="text-white/50 text-sm mb-1 uppercase tracking-widest">Urgency</p>
+                        <p className={`text-xl font-bold text-white uppercase ${getUrgencyColor(issue.urgency).split(' ')[0]}`}>
+                          {issue.urgency}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4 font-mono">
+                    <div className="p-6 border-2 border-white/20 bg-white/5">
+                      <p className="text-white text-lg leading-relaxed mb-4">No analysis available.</p>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </div>
 
@@ -183,6 +199,9 @@ export function ReportDetailsPage() {
                 <div className="space-y-2 font-mono text-sm text-white/50">
                   <p>
                     CREATED: <span className="text-white">{new Date(issue.createdAt).toLocaleString()}</span>
+                  </p>
+                  <p>
+                    UPDATED: <span className="text-white">{new Date(issue.updatedAt || issue.createdAt).toLocaleString()}</span>
                   </p>
                 </div>
               </motion.div>

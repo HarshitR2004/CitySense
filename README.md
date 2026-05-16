@@ -2,7 +2,6 @@
 
 CitySense is a full-stack AI-powered civic intelligence platform designed to modernize urban issue reporting and monitoring workflows. The platform enables citizens to report infrastructure and public safety issues in real time using a mobile application, while providing municipal authorities with an intelligent analytics dashboard for monitoring, prioritization, and decision-making.
 
-
 ---
 
 ## Key Features
@@ -32,7 +31,7 @@ CitySense is a full-stack AI-powered civic intelligence platform designed to mod
 * Interactive web dashboard with:
 
   * live issue feed
-  * geospatial map visualization
+  * map visualization
   * analytics charts
   * report monitoring tables
   * realtime Firestore updates
@@ -44,13 +43,6 @@ CitySense is a full-stack AI-powered civic intelligence platform designed to mod
 * GPS-enabled issue reporting.
 * Realtime report submission to backend APIs.
 
-### Scalable Backend Architecture
-
-* FastAPI-based REST backend with modular service-oriented architecture.
-* Structured Pydantic validation and AI response schemas.
-* Firebase Firestore integration for realtime cloud persistence.
-* Production-style AI processing pipeline with service abstraction.
-
 ---
 
 ## System Architecture
@@ -60,29 +52,15 @@ CitySense is a full-stack AI-powered civic intelligence platform designed to mod
             ↓
        FastAPI Backend
             ↓
-     YOLOv8 Detection Layer
-            ↓
-  Gemini Grounded Reasoning
-            ↓
- Firebase Firestore Storage
-            ↓
+ Firebase Storage + Firestore
+      ↓
+     Redis Queue
+      ↓
+    Celery Worker
+      ↓
+   YOLOv8 + Gemini Processing
+      ↓
+ Firebase Firestore Status Updates
+      ↓
   Realtime Monitoring Dashboard
 ```
-
----
-
-## AI Pipeline
-
-CitySense uses a multi-stage AI inference pipeline:
-
-1. User uploads civic issue image.
-2. YOLOv8 model performs object detection and issue localization.
-3. Detection results are converted into structured context.
-4. Gemini generates  civic analysis and recommendations.
-5. Structured reports are stored in Firestore.
-6. Dashboard updates in realtime for monitoring and analytics.
-
-This hybrid architecture significantly improves consistency and reduces hallucinations compared to standalone LLM-based image analysis systems.
-
-
-

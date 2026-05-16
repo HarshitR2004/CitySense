@@ -3,10 +3,12 @@
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from app.config.firebase_config import FirebaseConfig
 from app.models.report_schema import ReportStatus
+from app.models.queue_schema import AIProcessingStatus, ProcessingStage
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +29,31 @@ class FirestoreService:
             logger.error(f"Failed to initialize Firestore service: {e}")
             raise
 
+    def generate_report_id(self) -> str:
+        """Generate a new report identifier before any persistence occurs."""
+
+        return self._generate_report_id()
+
+    def build_storage_path(self, report_id: str, filename: str) -> str:
+        """Build a stable Firebase Storage path for a submitted image."""
+
+        safe_name = Path(filename or "image.jpg").name or "image.jpg"
+        return f"reports/{report_id}/{uuid.uuid4().hex}_{safe_name}"
+
     def create_report(
         self,
+        report_id: str,
         location: Dict[str, float],
-        analysis: Dict[str, Any],
         image_url: str,
+        storage_path: str,
+        analysis: Optional[Dict[str, Any]] = None,
         detection_context: Optional[Dict[str, Any]] = None,
+        status: ReportStatus = ReportStatus.REPORTED,
+        ai_status: AIProcessingStatus = AIProcessingStatus.QUEUED,
+        stage: ProcessingStage = ProcessingStage.WAITING,
+        progress: int = 0,
+        task_id: Optional[str] = None,
+        processing_error: Optional[str] = None,
     ) -> str:
         """
         Create a new report document in Firestore.
@@ -49,15 +70,19 @@ class FirestoreService:
             Exception: If database operation fails
         """
         try:
-            report_id = self._generate_report_id()
-
             report_data = {
                 "reportId": report_id,
                 "imageUrl": image_url,
+                "storagePath": storage_path,
                 "location": location,
-                "analysis": analysis,
+                "analysis": analysis or {},
                 "detectionContext": detection_context or {},
-                "status": ReportStatus.PENDING.value,
+                "status": status.value,
+                "ai_status": ai_status.value,
+                "stage": stage.value,
+                "progress": progress,
+                "task_id": task_id,
+                "processing_error": processing_error,
                 "createdAt": datetime.utcnow(),
                 "updatedAt": datetime.utcnow(),
             }
@@ -187,7 +212,102 @@ class FirestoreService:
             logger.error(f"Error updating report status {report_id}: {e}")
             raise
 
-    def upload_image_to_storage(self, image_bytes: bytes, filename: str) -> str:
+    def update_report_fields(self, report_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Patch a report document and return the updated payload."""
+
+        try:
+            doc = self.db.collection(self.REPORTS_COLLECTION).document(report_id).get()
+
+            if not doc.exists:
+                logger.warning(f"Report not found for update: {report_id}")
+                raise ValueError(f"Report not found: {report_id}")
+
+            normalized_updates = dict(updates)
+            normalized_updates["updatedAt"] = datetime.utcnow()
+
+            self.db.collection(self.REPORTS_COLLECTION).document(report_id).update(normalized_updates)
+
+            logger.info("Updated report fields for %s: %s", report_id, ", ".join(sorted(normalized_updates.keys())))
+            return self.get_report_by_id(report_id)
+
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating report fields {report_id}: {e}")
+            raise
+
+    def update_ai_processing_state(
+        self,
+        report_id: str,
+        *,
+        ai_status: Optional[AIProcessingStatus] = None,
+        stage: Optional[ProcessingStage] = None,
+        progress: Optional[int] = None,
+        task_id: Optional[str] = None,
+        processing_error: Optional[str] = None,
+        analysis: Optional[Dict[str, Any]] = None,
+        detection_context: Optional[Dict[str, Any]] = None,
+        ai_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Update only the async AI lifecycle fields."""
+
+        updates: Dict[str, Any] = {}
+
+        if ai_status is not None:
+            updates["ai_status"] = ai_status.value
+        if stage is not None:
+            updates["stage"] = stage.value
+        if progress is not None:
+            updates["progress"] = progress
+        if task_id is not None:
+            updates["task_id"] = task_id
+        if processing_error is not None:
+            updates["processing_error"] = processing_error
+        if analysis is not None:
+            updates["analysis"] = analysis
+        if detection_context is not None:
+            updates["detectionContext"] = detection_context
+        if ai_metadata is not None:
+            updates["ai_metadata"] = ai_metadata
+
+        if not updates:
+            return self.get_report_by_id(report_id)
+
+        return self.update_report_fields(report_id, updates)
+
+    def mark_ai_queue_failed(self, report_id: str, error_message: str) -> Dict[str, Any]:
+        """Record that the report was stored successfully but queue dispatch failed."""
+
+        return self.update_ai_processing_state(
+            report_id,
+            ai_status=AIProcessingStatus.FAILED,
+            stage=ProcessingStage.QUEUE_FAILED,
+            progress=0,
+            processing_error=error_message,
+        )
+
+    def download_image_from_storage(self, storage_path: str) -> bytes:
+        """Download a report image from Firebase Storage for worker-side AI processing."""
+
+        if not self.storage_bucket:
+            raise ValueError(
+                "Firebase Storage not configured. "
+                "Set FIREBASE_STORAGE_BUCKET environment variable."
+            )
+
+        if not storage_path:
+            raise ValueError("Storage path is required to download a report image")
+
+        blob = self.storage_bucket.blob(storage_path)
+        return blob.download_as_bytes()
+
+    def upload_image_to_storage(
+        self,
+        image_bytes: bytes,
+        filename: str,
+        blob_name: Optional[str] = None,
+        content_type: str = "image/jpeg",
+    ) -> str:
         """
         Upload an image to Firebase Storage.
 
@@ -215,12 +335,12 @@ class FirestoreService:
                 logger.warning(f"Image size {len(image_bytes)} exceeds max {self.MAX_FILE_SIZE}")
                 raise ValueError(f"File size exceeds maximum allowed size of {self.MAX_FILE_SIZE} bytes")
 
-            # Generate unique blob name
-            blob_name = f"reports/{uuid.uuid4()}/{filename}"
+            # Generate a stable blob name so workers can fetch the exact asset later.
+            blob_name = blob_name or self.build_storage_path(self._generate_report_id(), filename)
 
             # Upload to Storage
             blob = self.storage_bucket.blob(blob_name)
-            blob.upload_from_string(image_bytes, content_type="image/jpeg")
+            blob.upload_from_string(image_bytes, content_type=content_type)
 
             # Make blob public and get URL
             blob.make_public()

@@ -18,3 +18,7 @@ requests==2.32.3
 aiofiles==24.1.0
 
 python-dotenv==1.1.0
+
+celery[redis]==5.4.0
+redis==5.2.1
+flower==2.0.1
