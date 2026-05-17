@@ -1,5 +1,3 @@
-"""Celery tasks for async CitySense report processing."""
-
 from __future__ import annotations
 
 import logging

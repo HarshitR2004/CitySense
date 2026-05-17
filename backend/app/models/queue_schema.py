@@ -1,5 +1,3 @@
-"""Schemas for the async report submission and AI processing queue."""
-
 from enum import Enum
 from typing import Optional
 

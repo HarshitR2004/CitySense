@@ -7,8 +7,6 @@ from firebase_admin import credentials, firestore, storage
 
 logger = logging.getLogger(__name__)
 
-
-
 class FirebaseConfig:
     """Manages Firebase service initialization and provides access to clients."""
 
@@ -19,21 +17,9 @@ class FirebaseConfig:
     def initialize(cls) -> None:
         """
         Initialize Firebase Admin SDK with credentials from service account JSON file.
-
-        Expected workflow:
-        1. Download Firebase service account JSON from Firebase Console
-           > Project Settings > Service Accounts > Generate new private key
-        2. Save the file as: backend/app/config/firebase-key.json
-        3. This file should be added to .gitignore (never commit credentials!)
-        4. When running locally, ensure FIREBASE_CREDENTIALS_PATH env var is set
-
-        Raises:
-            FileNotFoundError: If credentials file is not found
-            ValueError: If Firebase app is already initialized
+        
         """
         try:
-            # Get credentials path from environment or use default
-            # Default to the firebase-key.json located next to this config file
             default_cred_path = os.path.join(os.path.dirname(__file__), "firebase-key.json")
 
             cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", default_cred_path)
@@ -120,10 +106,3 @@ class FirebaseConfig:
             )
 
         return cls._storage_bucket
-
-
-# Initialize Firebase on module import (production pattern)
-try:
-    FirebaseConfig.initialize()
-except Exception as e:
-    logger.warning(f"Firebase initialization skipped (may be running in test/dev mode): {e}")

@@ -1,5 +1,3 @@
-"""Celery application configured to run CitySense background jobs through Redis."""
-
 from __future__ import annotations
 
 import logging

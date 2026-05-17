@@ -1,5 +1,3 @@
-"""Report ingestion service for the immediate submission path."""
-
 import asyncio
 import logging
 from typing import Dict, Any, Optional
@@ -90,7 +88,7 @@ class ReportService:
 
             logger.info("Report persisted with id=%s, storage_path=%s", report_id, storage_path)
 
-            task_id: Optional[str] = None
+            task_id = None
 
             try:
                 async_result = celery_app.send_task("citysense.process_report_ai", args=[report_id])
@@ -124,25 +122,6 @@ class ReportService:
         except Exception as e:
             logger.error(f"Error submitting report: {e}")
             raise
-
-    async def process_image_and_generate_report_async(
-        self,
-        image_bytes: bytes,
-        latitude: float,
-        longitude: float,
-        original_filename: str = "image.jpg",
-        content_type: str = "image/jpeg",
-    ) -> Dict[str, Any]:
-        """Async wrapper for the submit path to keep the FastAPI handler non-blocking."""
-
-        return await asyncio.to_thread(
-            self.submit_report,
-            image_bytes,
-            latitude,
-            longitude,
-            original_filename,
-            content_type,
-        )
 
     def process_image_and_generate_report(
         self,

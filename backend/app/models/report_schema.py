@@ -1,10 +1,3 @@
-"""
-Pydantic data models and schemas for the Civic Infrastructure Reporting System.
-
-These models define the structure of requests and responses for all API endpoints,
-and are used for validation and serialization.
-"""
-
 from datetime import datetime
 from typing import Optional
 from enum import Enum
